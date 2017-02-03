@@ -23,8 +23,11 @@ import (
 	"os"
 	"strconv"
 	//can be deleted, only for example printing
-	"math/rand"
+	// "math/rand"
 	// TODO
+	"net/rpc"
+	"net"
+	"log"
 )
 
 //Modes of operation
@@ -58,6 +61,35 @@ type Resource struct {
 //An array of resources
 type Resources []Resource
 
+// My stuffs =======================================================
+
+type PeerAddressAndStatus struct {
+	Address string
+	Status bool
+}
+
+type JoinRequest struct {
+	MyAddress string
+}
+
+type JoinResponse struct {
+	SessID int
+	RServerAddress string
+	// all except myIpPort
+	AllPeers []PeerAddressAndStatus
+	AllResources []string
+}
+
+var (
+	sessionID int
+	rServerConn *rpc.Client
+	myIpPort string
+	myID int
+	// TODO should not need this globally because have rServerConn whith which to talk to server..
+	serverIpPort string
+	peerList []PeerAddressAndStatus
+	resourceList []string
+)
 // Main workhorse method.
 func main() {
 	// Parse the command line args, panic if error
@@ -76,6 +108,57 @@ func main() {
 	// res.FinalPrint(physicalPeerId)
 
 	// TODO
+	// if -j call Join RPC to otherIpPort, will receive sessionID, serverIpPort, peerList, resourceList
+
+	myIpPort = peerIpPort
+	myID = physicalPeerId
+
+	if mode == BOOTSTRAP {
+		serverIpPort = otherIpPort
+	}
+
+	// Append PeerAddressAndStatus{myIpPort, true} to peerList
+	// if bootstrapper, will be first in peerList
+	peerList = append(peerList, PeerAddressAndStatus{myIpPort, true}) 
+
+
+	// TODO Start listenRPC thread
+
+	// start connection to Server for all peers and keep open
+	raddr, err := net.ResolveTCPAddr("tcp", serverIpPort)
+	checkError("Connecting to server: ", err, true)
+
+	// Connection to the server
+	serverConn, err := net.DialTCP("tcp", nil, raddr)
+	checkError("Dialing the server: ", err, true)
+	rServerConn = rpc.NewClient(serverConn)
+
+
+	// if -b get session id
+	if mode == BOOTSTRAP {
+		in := Init{
+			IPaddr:   "",
+		}
+		err = rServerConn.Call("RServer.InitSession", in, &sessionID)
+		checkError("", err, false)
+	}
+
+	fmt.Println("The RServer.InitSession responded with sessionID: ", sessionID)
+
+	fmt.Println("Bye bye !!   :)")
+}
+
+
+
+
+
+func checkError(msg string, err error, exit bool) {
+	if err != nil {
+		log.Println(msg, err)
+		if exit {
+			os.Exit(-1)
+		}
+	}
 }
 
 // Parses the command line arguments, two cases are valid
