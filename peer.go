@@ -28,7 +28,7 @@ import (
 	"net/rpc"
 	"net"
 	"log"
-	"time"
+	// "time"
 )
 
 //Modes of operation
@@ -118,14 +118,6 @@ func main() {
 	myIpPort = peerIpPort
 	myID = physicalPeerId
 
-	if mode == BOOTSTRAP {
-		serverIpPort = otherIpPort
-	}
-
-	// Append PeerAddressAndStatus{myIpPort, true} to peerList
-	// if bootstrapper, will be first in peerList
-	peerList = append(peerList, PeerAddressAndStatus{myIpPort, true}) 
-
 	done := make(chan int)
 
 		// Set up RPC so peers can talk to each other
@@ -148,6 +140,9 @@ func main() {
 
 	// if -b get session id
 	if mode == BOOTSTRAP {
+		serverIpPort = otherIpPort
+		peerList = append(peerList, PeerAddressAndStatus{myIpPort, true})
+
 		raddr, err := net.ResolveTCPAddr("tcp", serverIpPort)
 		checkError("Connecting to server: ", err, true)
 
@@ -171,6 +166,24 @@ func main() {
 		//TODO get resource, manage, delegate if exists peer, else wait till peer exists.
 	} else {
 		// TODO Join a peer
+
+		var joinResp JoinResponse
+		joinReq := JoinRequest{myIpPort}
+
+		client, err := rpc.Dial("tcp", otherIpPort)
+		checkError("rpc.Dial in Joining", err, false)
+		err = client.Call("Peer.Join", joinReq, &joinResp)
+		checkError("client.Call(Peer.Join: ", err, false)
+
+		sessionID = joinResp.SessID
+		serverIpPort = joinResp.RServerAddress
+		peerList = joinResp.AllPeers
+		peerList = append(peerList, PeerAddressAndStatus{myIpPort, true})
+		resourceList = joinResp.AllResources
+
+		fmt.Println("successfully called Peer.Join to: ", otherIpPort)
+		fmt.Println("After Join, my sessionID: ", sessionID, " my serverIpPort: ", serverIpPort)
+		fmt.Println(" my peerList: ", peerList, " my resourceList: ", resourceList)
 	}
 
 	
@@ -210,6 +223,16 @@ func (p *Peer) Ping(PeerId int, reply *bool) error {
 func (p *Peer) Exit(Request bool, reply *bool) error {	
 	os.Exit(0)
 	*reply = true
+	return nil
+}
+
+func (p *Peer) Join(JReq JoinRequest, JResp *JoinResponse) error {
+	// TODO have to lock stuff???  Probably.
+	fmt.Println("Before updating peerList when receive Peer.Join rpc, peerList: ", peerList)
+	*JResp = JoinResponse{sessionID, serverIpPort, peerList, resourceList}
+	peerList = append(peerList, PeerAddressAndStatus{JReq.MyAddress, true})
+	fmt.Println("After updating peerList when receive Peer.Join rpc, peerList: ", peerList)
+	// TODO broadcast new peerList to all peers (except this one??)
 	return nil
 }
 
