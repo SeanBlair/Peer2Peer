@@ -28,6 +28,7 @@ import (
 	"net/rpc"
 	"net"
 	"log"
+	"time"
 )
 
 //Modes of operation
@@ -68,6 +69,9 @@ type PeerAddressAndStatus struct {
 	Status bool
 }
 
+type Peer int
+
+
 type JoinRequest struct {
 	MyAddress string
 }
@@ -80,16 +84,17 @@ type JoinResponse struct {
 	AllResources []string
 }
 
+
 var (
 	sessionID int
-	rServerConn *rpc.Client
 	myIpPort string
 	myID int
-	// TODO should not need this globally because have rServerConn whith which to talk to server..
 	serverIpPort string
 	peerList []PeerAddressAndStatus
 	resourceList []string
 )
+
+
 // Main workhorse method.
 func main() {
 	// Parse the command line args, panic if error
@@ -121,35 +126,94 @@ func main() {
 	// if bootstrapper, will be first in peerList
 	peerList = append(peerList, PeerAddressAndStatus{myIpPort, true}) 
 
+	done := make(chan int)
 
-	// TODO Start listenRPC thread
+		// Set up RPC so peers can talk to each other
+	go func() {
+		pServer := rpc.NewServer()
+		p := new(Peer)
+		pServer.Register(p)
 
-	// start connection to Server for all peers and keep open
-	raddr, err := net.ResolveTCPAddr("tcp", serverIpPort)
-	checkError("Connecting to server: ", err, true)
+		l, err := net.Listen("tcp", myIpPort)
+		checkError("", err, true)
+		fmt.Println("Succeded in setting up an rpc server on address: ", myIpPort)
 
-	// Connection to the server
-	serverConn, err := net.DialTCP("tcp", nil, raddr)
-	checkError("Dialing the server: ", err, true)
-	rServerConn = rpc.NewClient(serverConn)
+		for {
+			conn, err := l.Accept()
+			checkError("", err, false)
+			go pServer.ServeConn(conn)
+		}
+	}()	
 
 
 	// if -b get session id
 	if mode == BOOTSTRAP {
+		raddr, err := net.ResolveTCPAddr("tcp", serverIpPort)
+		checkError("Connecting to server: ", err, true)
+
+		// Connection to the server
+		serverConn, err := net.DialTCP("tcp", nil, raddr)
+		checkError("Dialing the server: ", err, true)
+		rServerConn := rpc.NewClient(serverConn)
+
 		in := Init{
 			IPaddr:   "",
 		}
 		err = rServerConn.Call("RServer.InitSession", in, &sessionID)
 		checkError("", err, false)
+
+		// to allow other peers on same machine to connect at different times to RServer
+		// Having a connection with RServer seems to be required to be synchronously
+		rServerConn.Close()
+
+		fmt.Println("The RServer.InitSession responded with sessionID: ", sessionID)
+
+		//TODO get resource, manage, delegate if exists peer, else wait till peer exists.
+	} else {
+		// TODO Join a peer
 	}
 
-	fmt.Println("The RServer.InitSession responded with sessionID: ", sessionID)
+	
 
+	// // for testing rpcs...
+	// if mode == JOIN {
+	// 	var reply = false
+	// 	// req := true
+	// 	id := myID
+	// 	fmt.Println("About to rpc.Dial address: ", otherIpPort)
+	// 	client, err := rpc.Dial("tcp", otherIpPort)
+	// 	checkError("rpc.Dial: to address: ", err, false)
+	// 	// err = client.Call("Peer.Exit", req, &reply)
+	// 	err = client.Call("Peer.Ping", id, &reply)
+	// 	checkError("Peer.Exit: ", err, false)
+	// 	fmt.Println("succeded in making the Peer.Ping rpc call...!!!!")
+
+	// 	// fmt.Println("succeded in making the Peer.Exit rpc call...!!!!")
+	// }
+
+
+
+	// blocks while threads exist alive
+	<-done
 	fmt.Println("Bye bye !!   :)")
 }
 
 
 
+func (p *Peer) Ping(PeerId int, reply *bool) error {
+	*reply = true
+	fmt.Println("I received a Ping rpc call from peerId: ", PeerId)
+	return nil
+}
+
+
+func (p *Peer) Exit(Request bool, reply *bool) error {	
+	os.Exit(0)
+	*reply = true
+	return nil
+}
+
+// TODO Implement Join(), AddPeer(), AddResource(), GetNextResource()
 
 
 func checkError(msg string, err error, exit bool) {
