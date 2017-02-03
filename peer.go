@@ -116,9 +116,6 @@ func main() {
 	// JoinPrint(physicalPeerId)
 	// res.FinalPrint(physicalPeerId)
 
-	// TODO
-	// if -j call Join RPC to otherIpPort, will receive sessionID, serverIpPort, peerList, resourceList
-
 	myIpPort = peerIpPort
 	myID = physicalPeerId
 
@@ -203,7 +200,7 @@ func main() {
 
 
 // For determining if peer is alive
-// Will fail (how?) when called.
+// TODO Will fail (how?) when called.
 func (p *Peer) Ping(PeerId string, reply *bool) error {
 	*reply = true
 	fmt.Println("I received a Ping rpc call from peerId: ", PeerId)
