@@ -84,6 +84,10 @@ type JoinResponse struct {
 	AllResources []string
 }
 
+type AddPeerRequest struct {
+	PeerAddress string
+}
+
 
 var (
 	sessionID int
@@ -164,8 +168,9 @@ func main() {
 		fmt.Println("The RServer.InitSession responded with sessionID: ", sessionID)
 
 		//TODO get resource, manage, delegate if exists peer, else wait till peer exists.
+
+		// Joining peer
 	} else {
-		// TODO Join a peer
 
 		var joinResp JoinResponse
 		joinReq := JoinRequest{myIpPort}
@@ -186,25 +191,10 @@ func main() {
 		fmt.Println(" my peerList: ", peerList, " my resourceList: ", resourceList)
 	}
 
-	
-
-	// // for testing rpcs...
-	// if mode == JOIN {
-	// 	var reply = false
-	// 	// req := true
-	// 	id := myID
-	// 	fmt.Println("About to rpc.Dial address: ", otherIpPort)
-	// 	client, err := rpc.Dial("tcp", otherIpPort)
-	// 	checkError("rpc.Dial: to address: ", err, false)
-	// 	// err = client.Call("Peer.Exit", req, &reply)
-	// 	err = client.Call("Peer.Ping", id, &reply)
-	// 	checkError("Peer.Exit: ", err, false)
-	// 	fmt.Println("succeded in making the Peer.Ping rpc call...!!!!")
-
-	// 	// fmt.Println("succeded in making the Peer.Exit rpc call...!!!!")
-	// }
-
-
+	// TODO implement Ping thread
+	// constantly (concurrently) pings all addresses != myIpPort in peerList that have Status = true
+	// if a ping fails, set the status to false.
+	// need to lock.
 
 	// blocks while threads exist alive
 	<-done
@@ -212,31 +202,72 @@ func main() {
 }
 
 
-
-func (p *Peer) Ping(PeerId int, reply *bool) error {
+// For determining if peer is alive
+// Will fail (how?) when called.
+func (p *Peer) Ping(PeerId string, reply *bool) error {
 	*reply = true
 	fmt.Println("I received a Ping rpc call from peerId: ", PeerId)
 	return nil
 }
 
-
+// Call for peer to terminate
 func (p *Peer) Exit(Request bool, reply *bool) error {	
 	os.Exit(0)
 	*reply = true
 	return nil
 }
 
+// Called when a peer wants to join the system, shares new peer with live peers in peerList
+// and returns to joining peer: sessionID, serverIpPort, peerList (without joining peer) and
+// resourceList
 func (p *Peer) Join(JReq JoinRequest, JResp *JoinResponse) error {
 	// TODO have to lock stuff???  Probably.
-	fmt.Println("Before updating peerList when receive Peer.Join rpc, peerList: ", peerList)
 	*JResp = JoinResponse{sessionID, serverIpPort, peerList, resourceList}
 	peerList = append(peerList, PeerAddressAndStatus{JReq.MyAddress, true})
 	fmt.Println("After updating peerList when receive Peer.Join rpc, peerList: ", peerList)
-	// TODO broadcast new peerList to all peers (except this one??)
+	
+	go broadcastPeerList(JReq.MyAddress)
 	return nil
 }
 
-// TODO Implement Join(), AddPeer(), AddResource(), GetNextResource()
+// Called when a peer gets joined by a peer. Used to update all other peer's peerList
+func (p *Peer) AddPeer(AddPeerReq AddPeerRequest, reply *bool) error {
+	peerList = append(peerList, PeerAddressAndStatus{AddPeerReq.PeerAddress, true})
+	fmt.Println("Received a Peer.AddPeer call and my peerList now contains: ", peerList)
+	*reply = true
+	return nil
+}
+
+// TODO Implement AddResource(), GetNextResource()
+
+
+// Shares new peer address to all peers except myself joining peer. (All peers unaware of join)
+func broadcastPeerList(joiningPeer string) {
+	// needs to concurrently add to all peers. Needs to support nonexistent peers, not yet updated in peerList
+	// TODO need to block peerList?? probably...
+	for _, peerAddr := range peerList {
+		// do not call joiningPeer or myIpPort
+		if shouldBroadcastPeerList(peerAddr, joiningPeer) {
+			go sendNewPeer(peerAddr.Address, joiningPeer)
+		}
+	}
+}
+
+// Returns true if peer in peerList (peerAddrNStatus), is not dead and neither me, nor new joining peer
+func shouldBroadcastPeerList(peerAddrNStatus PeerAddressAndStatus, joiningPeer string) bool {
+	peerAddress := peerAddrNStatus.Address
+	return peerAddrNStatus.Status && peerAddress != joiningPeer && peerAddress != myIpPort 
+}
+
+// Calls Peer.AddPeer with arg newPeer to peerAddress
+func sendNewPeer(peerAddress string, newPeer string) {
+		var reply bool
+		req := AddPeerRequest{newPeer}
+		client, err := rpc.Dial("tcp", peerAddress)
+		checkError("rpc.Dial: in sendNewPeer(): ", err, false)
+		err = client.Call("Peer.AddPeer", req, &reply)
+		checkError("Peer.AddPeer in sendNewPeer: ", err, false)
+}
 
 
 func checkError(msg string, err error, exit bool) {
