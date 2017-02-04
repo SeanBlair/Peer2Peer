@@ -352,6 +352,7 @@ func getNextResource(peerAddress string) {
 	// Dead peer, ignore
 	if err != nil {
 		fmt.Println("!!!!!!!!!Dead peer: ", peerAddress, " caught by getNextResource()")
+		//TODO if this fails, need to call another peer!!!!
 		return
 	}
 	err = client.Call("Peer.GetNextResource", myID, &reply)
