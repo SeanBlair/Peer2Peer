@@ -28,7 +28,7 @@ import (
 	"net/rpc"
 	"net"
 	"log"
-	// "time"
+	"time"
 )
 
 //Modes of operation
@@ -180,6 +180,9 @@ func main() {
 		err = client.Call("Peer.Join", joinReq, &joinResp)
 		checkError("client.Call(Peer.Join: ", err, false)
 
+		err = client.Close()
+		checkError("client.Close() in Join call: ", err, false)
+
 		sessionID = joinResp.SessID
 		serverIpPort = joinResp.RServerAddress
 		peerList = joinResp.AllPeers
@@ -194,9 +197,7 @@ func main() {
 	}
 
 	// TODO implement Ping thread
-	// constantly (concurrently) pings all addresses != myIpPort in peerList that have Status = true
-	// if a ping fails, set the status to false.
-	// need to lock.
+	go ping()
 
 	// blocks while threads exist alive
 	<-done
@@ -204,11 +205,9 @@ func main() {
 }
 
 
-// For determining if peer is alive
-// TODO Will fail (how?) when called.
-func (p *Peer) Ping(PeerId string, reply *bool) error {
+// For determining if peer is alive. If dead caller's rpc.Dial will gracefully fail
+func (p *Peer) Ping(PeerId int, reply *bool) error {
 	*reply = true
-	fmt.Println("I received a Ping rpc call from peerId: ", PeerId)
 	return nil
 }
 
@@ -242,6 +241,49 @@ func (p *Peer) AddPeer(AddPeerReq AddPeerRequest, reply *bool) error {
 
 // TODO Implement AddResource(), GetNextResource()
 
+// Pings all peers currently alive, if peer dead, updates peerList
+func ping() {
+	// TODO need to lock??
+	for {
+		for i, peer := range peerList {
+			if shouldPing(peer) {
+				// TODO make multithreaded
+				pingPeer(peer.Address, i)
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// Calls peer and if dead, sets its status to false in peerList
+// TODO lock peerList??
+func pingPeer(peerAddress string, peerListIndex int) {
+	var reply bool
+	client, err := rpc.Dial("tcp", peerAddress)
+	// Dead peer
+	if err != nil {
+		markDeadPeer(peerListIndex)
+		fmt.Println("peerList after updating dead peer:", peerAddress, " is: ", peerList)
+		return
+	}
+	err = client.Call("Peer.Ping", myID, &reply)
+	checkError("Peer.Ping in pingPeer: ", err, false)
+	
+	err = client.Close()
+	checkError("client.Close() in pingPeer: ", err, false)
+}
+
+
+// Sets peer at given index in peerList to Status = false
+func markDeadPeer(peerListIndex int) {
+	// TODO lock??
+	peerList[peerListIndex].Status = false
+}
+
+// Returns true if peer is alive and not myIpPort
+func shouldPing(peer PeerAddressAndStatus) bool {
+	return peer.Status && peer.Address != myIpPort
+}
 
 // Shares new peer address to all peers except myself joining peer. (All peers unaware of join)
 func broadcastPeerList(joiningPeer string) {
@@ -263,16 +305,20 @@ func shouldBroadcastPeerList(peerAddrNStatus PeerAddressAndStatus, joiningPeer s
 
 // Calls Peer.AddPeer with arg newPeer to peerAddress
 func sendNewPeer(peerAddress string, newPeer string) {
-		var reply bool
-		req := AddPeerRequest{newPeer}
-		client, err := rpc.Dial("tcp", peerAddress)
-		// Dead peer, ignore
-		if err != nil {
-			return
-		}
-		checkError("rpc.Dial: in sendNewPeer(): ", err, false)
-		err = client.Call("Peer.AddPeer", req, &reply)
-		checkError("Peer.AddPeer in sendNewPeer: ", err, false)
+	var reply bool
+	req := AddPeerRequest{newPeer}
+	client, err := rpc.Dial("tcp", peerAddress)
+	// Dead peer, ignore
+	if err != nil {
+		return
+	}
+	checkError("rpc.Dial: in sendNewPeer(): ", err, false)
+	err = client.Call("Peer.AddPeer", req, &reply)
+	checkError("Peer.AddPeer in sendNewPeer: ", err, false)
+
+
+	err = client.Close()
+	checkError("client.Close() in sendNewPeer: ", err, false)
 }
 
 
