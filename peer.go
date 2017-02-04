@@ -164,6 +164,8 @@ func main() {
 
 		fmt.Println("The RServer.InitSession responded with sessionID: ", sessionID)
 
+		JoinPrint(physicalPeerId)
+
 		//TODO get resource, manage, delegate if exists peer, else wait till peer exists.
 
 		// Joining peer
@@ -174,6 +176,7 @@ func main() {
 
 		client, err := rpc.Dial("tcp", otherIpPort)
 		checkError("rpc.Dial in Joining", err, false)
+
 		err = client.Call("Peer.Join", joinReq, &joinResp)
 		checkError("client.Call(Peer.Join: ", err, false)
 
@@ -186,6 +189,8 @@ func main() {
 		fmt.Println("successfully called Peer.Join to: ", otherIpPort)
 		fmt.Println("After Join, my sessionID: ", sessionID, " my serverIpPort: ", serverIpPort)
 		fmt.Println(" my peerList: ", peerList, " my resourceList: ", resourceList)
+
+		JoinPrint(physicalPeerId)
 	}
 
 	// TODO implement Ping thread
@@ -261,6 +266,10 @@ func sendNewPeer(peerAddress string, newPeer string) {
 		var reply bool
 		req := AddPeerRequest{newPeer}
 		client, err := rpc.Dial("tcp", peerAddress)
+		// Dead peer, ignore
+		if err != nil {
+			return
+		}
 		checkError("rpc.Dial: in sendNewPeer(): ", err, false)
 		err = client.Call("Peer.AddPeer", req, &reply)
 		checkError("Peer.AddPeer in sendNewPeer: ", err, false)
