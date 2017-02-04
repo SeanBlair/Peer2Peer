@@ -81,7 +81,7 @@ type JoinResponse struct {
 	RServerAddress string
 	// all except myIpPort
 	AllPeers []PeerAddressAndStatus
-	AllResources []string
+	AllResources Resources
 }
 
 type AddPeerRequest struct {
@@ -95,7 +95,7 @@ var (
 	myID int
 	serverIpPort string
 	peerList []PeerAddressAndStatus
-	resourceList []string
+	resourceList Resources
 )
 
 
@@ -268,7 +268,7 @@ func pingPeer(peerAddress string, peerListIndex int) {
 	}
 	err = client.Call("Peer.Ping", myID, &reply)
 	checkError("Peer.Ping in pingPeer: ", err, false)
-	
+
 	err = client.Close()
 	checkError("client.Close() in pingPeer: ", err, false)
 }
