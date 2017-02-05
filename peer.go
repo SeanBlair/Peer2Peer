@@ -358,14 +358,12 @@ func delegateGetResource() {
 // yet updated the peers status in the peerList
 func getNextResource(peerAddress string) error {
 	var reply bool
-	client, err := rpc.Dial("tcp", peerAddress)
+	client, err := rpc.Dial("tcp", peerAddress)	
 	// Dead peer
 	if err != nil {
-		// TODO need to test, maybe put typo for hardcoded peer in client.Call() code.
 		return err
 	}
 	err = client.Call("Peer.GetNextResource", myID, &reply)
-
 	// TODO: maybe implement a timeout here? for if peer is taking too long, yet 
 	// not thrown error yet. Would return an error and let caller retry...
 
@@ -373,9 +371,10 @@ func getNextResource(peerAddress string) error {
 	if err != nil {
 		return err
 	}
-
 	err = client.Close()
-	checkError("client.Close() in getNextResource(): ", err, false)
+	if err != nil {
+		return err
+	}
 	return nil
 } 
 
@@ -437,14 +436,19 @@ func pingPeer(peerAddress string, peerListIndex int) {
 	// Dead peer
 	if err != nil {
 		markDeadPeer(peerListIndex)
-		// fmt.Println("peerList after updating dead peer:", peerAddress, " is: ", peerList)
 		return
 	}
 	err = client.Call("Peer.Ping", myID, &reply)
-	checkError("Peer.Ping in pingPeer: ", err, false)
+	if err != nil {
+		markDeadPeer(peerListIndex)
+		return
+	}
 
 	err = client.Close()
-	checkError("client.Close() in pingPeer: ", err, false)
+	if err != nil {
+		markDeadPeer(peerListIndex)
+		return
+	}
 }
 
 
