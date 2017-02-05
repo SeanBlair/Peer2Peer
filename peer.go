@@ -254,7 +254,9 @@ func (p *Peer) AddResource(AddResourceReq AddResourceRequest, reply *bool) error
 
 func (p *Peer) GetNextResource(PeerId int, reply *bool) error {
 	fmt.Println("Received a call to Peer.GetNextResource from: ", PeerId)
-	go getResource()
+	// Not serving on new thread to ensure the subsequent call to the RServer returns
+	// that is only moment peer is guaranteed to be alive for 3 seconds.
+	getResource()
 	*reply = true
 	return nil
 }
@@ -286,9 +288,9 @@ func getResource() {
 
 	rServerConn.Close()
 
-	manageResource(resource)
-
-	fmt.Println("Finished getResource call, can die ==========================")
+	// Release caller of Peer.GetNextResource by spawning new thread, because 
+	// this peer is guaranteed to not fail for 3 seconds.
+	go manageResource(resource)
 }
 
 // Shares resource with all peers, if numRemaning > 0, delegates next GetResource,
@@ -298,6 +300,7 @@ func manageResource(resource Resource) {
 
 	if resource.NumRemaining > 0 {
 		delegateGetResource()
+		fmt.Println("Finished manageResource() call, can die ==========================")
 	} else {
 		resourceList.FinalPrint(myID)
 		exitAllPeers()
@@ -322,7 +325,6 @@ func addResource(peerAddress string, resource Resource) {
 	client, err := rpc.Dial("tcp", peerAddress)
 	// Dead peer, ignore
 	if err != nil {
-		fmt.Println("!!!!!!!!!!!!Dead peer: ", peerAddress, " caught by addResource()")
 		return
 	}
 	err = client.Call("Peer.AddResource", addResourceArg, &reply)
@@ -337,31 +339,44 @@ func delegateGetResource() {
 	for {
 		peerAddress := getNextPeer()
 		if peerAddress != "" {
-			getNextResource(peerAddress)
+			err := getNextResource(peerAddress)
+			// if returns error, should call next peer in peerList.
+			if err != nil {
+				continue
+			}
+			// Happy path: getNextResource() call succeeded at least til point
+			// when other peer received Resource from RServer
 			break
 		} else {
 			time.Sleep(1 * time.Second)
 		}
 	}
-	// fmt.Println("Finished call to delegateGetResource()")
 }
 
-func getNextResource(peerAddress string) {
+// Returns error if either rpc.Dial or client.Call returns error,
+// which probably means peer is dead and the ping thread has not
+// yet updated the peers status in the peerList
+func getNextResource(peerAddress string) error {
 	var reply bool
 	client, err := rpc.Dial("tcp", peerAddress)
-	// Dead peer, ignore
+	// Dead peer
 	if err != nil {
-		fmt.Println("!!!!!!!!!Dead peer: ", peerAddress, " caught by getNextResource()")
-		//TODO if this fails, need to call another peer!!!!
-		return
+		// TODO need to test, maybe put typo for hardcoded peer in client.Call() code.
+		return err
 	}
 	err = client.Call("Peer.GetNextResource", myID, &reply)
-	checkError("Peer.GetNextResource in getNextResource(): ", err, false)
+
+	// TODO: maybe implement a timeout here? for if peer is taking too long, yet 
+	// not thrown error yet. Would return an error and let caller retry...
+
+	// Maybe peer dead, but ping not yet updated peer status in peerList
+	if err != nil {
+		return err
+	}
 
 	err = client.Close()
 	checkError("client.Close() in getNextResource(): ", err, false)
-
-	// fmt.Println("Finished call to Peer.GetNextResource to peer: ", peerAddress)
+	return nil
 } 
 
 // returns first peer in peerList that is alive and not me,
@@ -369,7 +384,6 @@ func getNextResource(peerAddress string) {
 func getNextPeer() string {
 	for _, peer := range peerList {
 		if peer.Status && peer.Address != myIpPort {
-			fmt.Println("next peer is: ", peer.Address)
 			return peer.Address
 		}
 	}
@@ -391,7 +405,6 @@ func exit(peerAddress string) {
 	client, err := rpc.Dial("tcp", peerAddress)
 	// Dead peer, ignore
 	if err != nil {
-		fmt.Println("!!!!!!!!!Dead peer: ", peerAddress, " caught by exit()")
 		return
 	}
 	err = client.Call("Peer.Exit", myID, &reply)
@@ -471,7 +484,6 @@ func sendNewPeer(peerAddress string, newPeer string) {
 	client, err := rpc.Dial("tcp", peerAddress)
 	// Dead peer, ignore
 	if err != nil {
-		fmt.Println("!!!!!!!!!Dead peer: ", peerAddress, " caught by sendNewPeer()")
 		return
 	}
 	err = client.Call("Peer.AddPeer", req, &reply)
