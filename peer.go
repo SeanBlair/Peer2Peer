@@ -233,7 +233,6 @@ func (p *Peer) AddPeer(AddPeerReq AddPeerRequest, reply *bool) error {
 // Provides the latest resource from RServer to ensure all peers have all resources
 func (p *Peer) AddResource(AddResourceReq AddResourceRequest, reply *bool) error {
 	resourceList = append(resourceList, AddResourceReq.TheResource)
-	// fmt.Println("Received a Peer.AddResource call and my resourceList now contains: ", resourceList)
 	*reply = true
 	return nil
 }
@@ -242,7 +241,6 @@ func (p *Peer) AddResource(AddResourceReq AddResourceRequest, reply *bool) error
 // Manages returned resource, sharing it with all peers and calls another
 // peer if more resources. Otherwise, prints the resources and closes all peers.
 func (p *Peer) GetNextResource(PeerId int, reply *bool) error {
-	fmt.Println("Received a call to Peer.GetNextResource from: ", PeerId)
 	// In order to guarantee the success of this call, not serving on new thread
 	// to ensure the subsequent call to RServer returns. That moment, peer is
 	// guaranteed to be alive for 3 seconds.
@@ -258,7 +256,7 @@ func getResource() {
 	// playing around with peer joins and failures before all resources are retrieved.
 	// TODO eliminate/comment out
 	rand.Seed(time.Now().Unix())
-	time.Sleep(time.Duration(rand.Intn(10)) * time.Second)
+	time.Sleep(time.Duration(rand.Intn(7)) * time.Second)
 
 	raddr, err := net.ResolveTCPAddr("tcp", serverIpPort)
 	checkError("net.ResolveTCPAddr in getResource(): ", err, false)
@@ -288,7 +286,6 @@ func manageResource(resource Resource) {
 
 	if resource.NumRemaining > 0 {
 		delegateGetResource()
-		fmt.Println("Finished manageResource() call, can die ==========================")
 	} else {
 		resourceList.FinalPrint(myID)
 		exitAllPeers()
