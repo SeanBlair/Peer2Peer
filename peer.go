@@ -26,6 +26,7 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
+	// "sync"
 	"time"
 )
 
@@ -91,6 +92,7 @@ type AddResourceRequest struct {
 
 var (
 	sessionID    int
+	// m            sync.RWMutex
 	myIpPort     string
 	myID         int
 	serverIpPort string
@@ -255,6 +257,8 @@ func getResource() {
 	// for testing purposes, will wait random period between 1 and 10 seconds to allow
 	// playing around with peer joins and failures before all resources are retrieved.
 	// TODO eliminate/comment out
+	// TODO probably a good idea to stall for at least a second here to allow all
+	// previous communication to happen, probably would avoid race conditions...
 	rand.Seed(time.Now().Unix())
 	time.Sleep(time.Duration(rand.Intn(7)) * time.Second)
 
@@ -409,8 +413,7 @@ func ping() {
 	for {
 		for i, peer := range peerList {
 			if shouldPing(peer) {
-				// TODO make multithreaded
-				pingPeer(peer.Address, i)
+				go pingPeer(peer.Address, i)
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
