@@ -21,12 +21,10 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"net/rpc"
 	"os"
 	"strconv"
-	// "sync"
 	"time"
 )
 
@@ -61,62 +59,60 @@ type Resource struct {
 //An array of resources
 type Resources []Resource
 
-// My stuffs =======================================================
-
+// The address and status of a peer that has joined the system
 type PeerAddressAndStatus struct {
 	Address string
 	Status  bool
 }
 
+// Peer server type
 type Peer int
 
+// Request that a peer sends when joining the system
 type JoinRequest struct {
 	MyAddress string
 }
 
+// Response from call to Peer.Join
 type JoinResponse struct {
 	SessID         int
 	RServerAddress string
-	// all except myIpPort
-	AllPeers     []PeerAddressAndStatus
-	AllResources Resources
+	AllPeers       []PeerAddressAndStatus
+	AllResources   Resources
 }
 
+// Request to communicate new peer in system
 type AddPeerRequest struct {
 	PeerAddress string
 }
 
+// Request to add resource that other peer retrieved from RServer
 type AddResourceRequest struct {
 	TheResource Resource
 }
 
 var (
-	sessionID    int
-	// m            sync.RWMutex
-	myIpPort     string
-	myID         int
+	// Returned from call to RServer.InitSession
+	sessionID int
+	// Address at which peer listens for RPC's
+	myIpPort string
+	// Peer's physical id
+	myID int
+	// Address at which RServer is listening
 	serverIpPort string
-	peerList     []PeerAddressAndStatus
+	// Array of peer + status that have joined the system
+	peerList []PeerAddressAndStatus
+	// Resources retrieved so far from RServer
 	resourceList Resources
 )
 
-// Main workhorse method.
+// Program entry point and main workhorse method.
 func main() {
 	// Parse the command line args, panic if error
 	mode, physicalPeerId, peerIpPort, otherIpPort, err := ParseArguments()
 	if err != nil {
 		panic(err)
 	}
-
-	// Example illustrating JoinPrint and FinalPrint usage:
-	//
-	// var res Resources
-	// for i := 0; i < 5; i++ {
-	// 	res = append(res, Resource{Resource: fmt.Sprintf("%d", i), LogicalPeerID: rand.Int(), NumRemaining: 5 - i})
-	// }
-	// JoinPrint(physicalPeerId)
-	// res.FinalPrint(physicalPeerId)
-
 	myIpPort = peerIpPort
 	myID = physicalPeerId
 	// for managing threads
@@ -127,10 +123,8 @@ func main() {
 		pServer := rpc.NewServer()
 		p := new(Peer)
 		pServer.Register(p)
-
 		l, err := net.Listen("tcp", myIpPort)
 		checkError("", err, true)
-
 		for {
 			conn, err := l.Accept()
 			checkError("", err, false)
@@ -145,38 +139,28 @@ func main() {
 
 		raddr, err := net.ResolveTCPAddr("tcp", serverIpPort)
 		checkError("Connecting to server: ", err, false)
-
 		// Connection to the server
 		serverConn, err := net.DialTCP("tcp", nil, raddr)
 		checkError("Dialing the server: ", err, false)
 		rServerConn := rpc.NewClient(serverConn)
-
 		in := Init{
 			IPaddr: "",
 		}
 		err = rServerConn.Call("RServer.InitSession", in, &sessionID)
 		checkError("rServerConn.Call(RServer.InitSession fail: ", err, false)
-
-		// To allow other peers on same machine to connect at different times to RServer
-		// Having a connection with RServer seems to be required to be synchronously
 		rServerConn.Close()
 
 		JoinPrint(physicalPeerId)
-
 		go getResource()
 
 		// Joining peer
 	} else {
-
 		var joinResp JoinResponse
 		joinReq := JoinRequest{myIpPort}
-
 		client, err := rpc.Dial("tcp", otherIpPort)
 		checkError("rpc.Dial in Joining", err, false)
-
 		err = client.Call("Peer.Join", joinReq, &joinResp)
 		checkError("client.Call(Peer.Join: ", err, false)
-
 		err = client.Close()
 		checkError("client.Close() in Join call: ", err, false)
 
@@ -186,16 +170,10 @@ func main() {
 		peerList = append(peerList, PeerAddressAndStatus{myIpPort, true})
 		resourceList = joinResp.AllResources
 
-		// fmt.Println("successfully called Peer.Join to: ", otherIpPort)
-		// fmt.Println("After Join, my sessionID: ", sessionID, " my serverIpPort: ", serverIpPort)
-		// fmt.Println(" my peerList: ", peerList, " my resourceList: ")
-		// resourceList.FinalPrint(myID)
-
 		JoinPrint(physicalPeerId)
 	}
 
 	go ping()
-
 	// blocks while threads exist alive
 	<-done
 }
@@ -218,7 +196,6 @@ func (p *Peer) Exit(PeerId int, reply *bool) error {
 // and returns to joining peer: sessionID, serverIpPort, peerList (without joining peer) and
 // resourceList
 func (p *Peer) Join(JReq JoinRequest, JResp *JoinResponse) error {
-	// TODO have to lock stuff???  Probably.
 	*JResp = JoinResponse{sessionID, serverIpPort, peerList, resourceList}
 	peerList = append(peerList, PeerAddressAndStatus{JReq.MyAddress, true})
 	go broadcastNewPeer(JReq.MyAddress)
@@ -253,18 +230,11 @@ func (p *Peer) GetNextResource(PeerId int, reply *bool) error {
 
 // Calls RServer.GetResource and manages returned Resource
 func getResource() {
-
-	// for testing purposes, will wait random period between 1 and 10 seconds to allow
-	// playing around with peer joins and failures before all resources are retrieved.
-	// TODO eliminate/comment out
-	// TODO probably a good idea to stall for at least a second here to allow all
-	// previous communication to happen, probably would avoid race conditions...
-	rand.Seed(time.Now().Unix())
-	time.Sleep(time.Duration(rand.Intn(7)) * time.Second)
+	// Stall to allow all previous communications to finish, helps avoid deadlocks
+	time.Sleep(100 * time.Millisecond)
 
 	raddr, err := net.ResolveTCPAddr("tcp", serverIpPort)
 	checkError("net.ResolveTCPAddr in getResource(): ", err, false)
-
 	// Connection to the server
 	serverConn, err := net.DialTCP("tcp", nil, raddr)
 	checkError("net.DialTCP in getResource(): ", err, false)
@@ -272,10 +242,8 @@ func getResource() {
 
 	getResourceReq := ResourceRequest{sessionID, ""}
 	var resource Resource
-
 	err = rServerConn.Call("RServer.GetResource", getResourceReq, &resource)
 	checkError("rServerConn.Call(RServer.GetResource): ", err, false)
-
 	rServerConn.Close()
 
 	// Release caller of Peer.GetNextResource by spawning new thread, because
@@ -287,7 +255,6 @@ func getResource() {
 // else tell all peers to exit, calls FinalPrint and exits.
 func manageResource(resource Resource) {
 	shareResource(resource)
-
 	if resource.NumRemaining > 0 {
 		delegateGetResource()
 	} else {
@@ -320,14 +287,13 @@ func addResource(peerAddress string, resource Resource) {
 	if err != nil {
 		return
 	}
-
 	err = client.Close()
 	if err != nil {
 		return
 	}
 }
 
-// Calls next alive peer in peerList, if none exist, waits
+// Calls next alive peer in peerList, if none exist, waits 1 second and retries
 func delegateGetResource() {
 	for {
 		peerAddress := getNextPeer()
@@ -341,6 +307,7 @@ func delegateGetResource() {
 			// when other peer received Resource from RServer
 			break
 		} else {
+			// no peer available, wait 1 second to retry
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -355,9 +322,6 @@ func getNextResource(peerAddress string) error {
 		return err
 	}
 	err = client.Call("Peer.GetNextResource", myID, &reply)
-	// TODO: maybe implement a timeout here? for if peer is taking too long, yet
-	// not thrown error yet. Would return an error and let caller retry...
-
 	if err != nil {
 		return err
 	}
@@ -368,7 +332,7 @@ func getNextResource(peerAddress string) error {
 	return nil
 }
 
-// returns first peer in peerList that is alive and not me,
+// Returns first peer in peerList that is alive and not me,
 // if none, returns ""
 func getNextPeer() string {
 	for _, peer := range peerList {
@@ -376,10 +340,10 @@ func getNextPeer() string {
 			return peer.Address
 		}
 	}
-	fmt.Println("No other peer at this point!!!")
 	return ""
 }
 
+// Tells all peers in system to exit, then exits program
 func exitAllPeers() {
 	for _, peer := range peerList {
 		if peer.Status && peer.Address != myIpPort {
@@ -408,8 +372,8 @@ func exit(peerAddress string) {
 }
 
 // Pings all peers currently alive, if peer dead, updates peerList
+// repeats every 100 milliseconds
 func ping() {
-	// TODO need to lock??
 	for {
 		for i, peer := range peerList {
 			if shouldPing(peer) {
@@ -420,12 +384,10 @@ func ping() {
 	}
 }
 
-// Calls peer and if dead, sets its status to false in peerList
-// TODO lock peerList??
+// Calls peer, any error interpreted as dead and sets its status to false in peerList
 func pingPeer(peerAddress string, peerListIndex int) {
 	var reply bool
 	client, err := rpc.Dial("tcp", peerAddress)
-	// Dead peer
 	if err != nil {
 		markDeadPeer(peerListIndex)
 		return
@@ -435,7 +397,6 @@ func pingPeer(peerAddress string, peerListIndex int) {
 		markDeadPeer(peerListIndex)
 		return
 	}
-
 	err = client.Close()
 	if err != nil {
 		markDeadPeer(peerListIndex)
@@ -443,9 +404,8 @@ func pingPeer(peerAddress string, peerListIndex int) {
 	}
 }
 
-// Sets peer at given index in peerList to Status = false
+// Sets peer at given index in peerList to peer.Status = false
 func markDeadPeer(peerListIndex int) {
-	// TODO lock??
 	peerList[peerListIndex].Status = false
 }
 
@@ -456,24 +416,22 @@ func shouldPing(peer PeerAddressAndStatus) bool {
 
 // Shares new peer address to all peers except myself and joining peer. (All peers unaware of join)
 func broadcastNewPeer(joiningPeer string) {
-	// needs to concurrently add to all peers. Needs to support nonexistent peers, not yet updated in peerList
-	// TODO need to block peerList?? probably...
 	for _, peerAddr := range peerList {
 		// do not call joiningPeer or myIpPort
-		if shouldBroadcastPeerList(peerAddr, joiningPeer) {
+		if shouldBroadcastPeer(peerAddr, joiningPeer) {
 			go sendNewPeer(peerAddr.Address, joiningPeer)
 		}
 	}
 }
 
-// Returns true if peer in peerList (peerAddrNStatus), is not dead and neither me, nor new joining peer
-func shouldBroadcastPeerList(peerAddrNStatus PeerAddressAndStatus, joiningPeer string) bool {
+// Returns true if peer in peerList (peerAddrNStatus), is not dead and neither me, nor new joiningPeer
+func shouldBroadcastPeer(peerAddrNStatus PeerAddressAndStatus, joiningPeer string) bool {
 	peerAddress := peerAddrNStatus.Address
 	return peerAddrNStatus.Status && peerAddress != joiningPeer && peerAddress != myIpPort
 }
 
 // Calls Peer.AddPeer with arg newPeer to peerAddress
-// If errors return because peer is likely dead.
+// If errors return because peer is assumed dead.
 func sendNewPeer(peerAddress string, newPeer string) {
 	var reply bool
 	req := AddPeerRequest{newPeer}
@@ -491,7 +449,7 @@ func sendNewPeer(peerAddress string, newPeer string) {
 	}
 }
 
-//
+// Prints msg + err to console and exits program if exit == true
 func checkError(msg string, err error, exit bool) {
 	if err != nil {
 		log.Println(msg, err)
