@@ -92,7 +92,7 @@ type AddResourceRequest struct {
 	TheResource Resource
 }
 
-// Request sent when pinging peer, used to identify missing 
+// Request sent when pinging peer, used to identify missing
 // peers in peerList due to a race condition scenario.
 type PingRequest struct {
 	PeerList []PeerAddressAndStatus
@@ -287,7 +287,7 @@ func manageResource(resource Resource) {
 		delegateGetResource()
 	} else {
 		// finds longest resourceList among peers
-        findLongestResourceList()
+		findLongestResourceList()
 
 		// checker that returns true if all resourceCounts
 		// are consecutive. for debugging.
@@ -297,7 +297,7 @@ func manageResource(resource Resource) {
 		} else {
 			fmt.Println("!!!Non-consecutive resources.... !!!!!!")
 		}
-		
+
 		resourceList.FinalPrint(myID)
 		exitAllPeers()
 	}
@@ -339,14 +339,14 @@ func getResourceList(peerAddress string) (theirResources Resources, err error) {
 	return shareResourceList.ResourceList, nil
 }
 
-// Returns true if no missing resources, for debugging only 
+// Returns true if no missing resources, for debugging only
 // TODO eliminate
 func allResourcesConsecutive() bool {
 	for i, resource := range resourceList {
 		resourceSlice := strings.Split(resource.Resource, " ")
-		count, _ := strconv.Atoi(resourceSlice[1]);
-		if ((count - 1) != i) {
-			fmt.Println("the value is: ", count, " when ", i + 1, " was expected!!!")
+		count, _ := strconv.Atoi(resourceSlice[1])
+		if (count - 1) != i {
+			fmt.Println("the value is: ", count, " when ", i+1, " was expected!!!")
 			return false
 		}
 	}
