@@ -199,6 +199,7 @@ func main() {
 // if so, callee overwrites its peerList with calling peers larger list.
 func (p *Peer) Ping(PingReq PingRequest, reply *bool) error {
 	if len(PingReq.PeerList) > len(peerList) {
+		// TODO remove println
 		fmt.Println("Found a discrepancy in peerLists, mine was shorter, fixed it")
 		peerList = PingReq.PeerList
 	}
@@ -288,6 +289,7 @@ func manageResource(resource Resource) {
 	} else {
 		// finds longest resourceList among peers
 		findLongestResourceList()
+		resourceList.FinalPrint(myID)
 
 		// checker that returns true if all resourceCounts
 		// are consecutive. for debugging.
@@ -298,7 +300,6 @@ func manageResource(resource Resource) {
 			fmt.Println("!!!Non-consecutive resources.... !!!!!!")
 		}
 
-		resourceList.FinalPrint(myID)
 		exitAllPeers()
 	}
 }
@@ -308,13 +309,13 @@ func manageResource(resource Resource) {
 func findLongestResourceList() {
 	for _, peer := range peerList {
 		if peer.Status && peer.Address != myIpPort {
-			TheirResourceList, err := getResourceList(peer.Address)
+			theirResourceList, err := getResourceList(peer.Address)
 			// Dead peer
 			if err != nil {
 				continue
 			}
-			if len(TheirResourceList) > len(resourceList) {
-				resourceList = TheirResourceList
+			if len(theirResourceList) > len(resourceList) {
+				resourceList = theirResourceList
 			}
 		}
 	}
