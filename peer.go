@@ -25,6 +25,7 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -89,6 +90,20 @@ type AddPeerRequest struct {
 // Request to add resource that other peer retrieved from RServer
 type AddResourceRequest struct {
 	TheResource Resource
+}
+
+// Request sent when pinging peer, used to identify missing 
+// peers in peerList due to a race condition scenario.
+type PingRequest struct {
+	PeerList []PeerAddressAndStatus
+}
+
+// Response to Peer.ShareResourceList rpc
+// Used to verify that the resourceList printed is the
+// longest (most complete). For the error case when the peer
+// that received numRemaining == 0 did not receive all Resources
+type ShareResourcesResponse struct {
+	ResourceList Resources
 }
 
 var (
@@ -180,7 +195,13 @@ func main() {
 
 // For determining if peer is alive. If dead, caller's rpc will gracefully fail,
 // triggering the caller to update the status of this peer in peerList to false
-func (p *Peer) Ping(PeerId int, reply *bool) error {
+// Also for determing if calling peer knows about more peers than callee,
+// if so, callee overwrites its peerList with calling peers larger list.
+func (p *Peer) Ping(PingReq PingRequest, reply *bool) error {
+	if len(PingReq.PeerList) > len(peerList) {
+		fmt.Println("Found a discrepancy in peerLists, mine was shorter, fixed it")
+		peerList = PingReq.PeerList
+	}
 	*reply = true
 	return nil
 }
@@ -230,6 +251,11 @@ func (p *Peer) GetNextResource(PeerId int, reply *bool) error {
 	return nil
 }
 
+func (p *Peer) ShareResourceList(PeerId int, ShareResResp *ShareResourcesResponse) error {
+	ShareResResp.ResourceList = resourceList
+	return nil
+}
+
 // Calls RServer.GetResource and manages returned Resource
 func getResource() {
 	// Stall to allow all previous communications to finish, helps avoid deadlocks
@@ -260,9 +286,71 @@ func manageResource(resource Resource) {
 	if resource.NumRemaining > 0 {
 		delegateGetResource()
 	} else {
+		// finds longest resourceList among peers
+        findLongestResourceList()
+
+		// checker that returns true if all resourceCounts
+		// are consecutive. for debugging.
+		// TODO eliminate this code...???
+		if allResourcesConsecutive() {
+			fmt.Println("There are ", len(resourceList), " resources and they are all consecutive! :) ")
+		} else {
+			fmt.Println("!!!Non-consecutive resources.... !!!!!!")
+		}
+		
 		resourceList.FinalPrint(myID)
 		exitAllPeers()
 	}
+}
+
+// Checks if any peer has a longer resource List, if so,
+// replaces resourceList with the longer one.
+func findLongestResourceList() {
+	for _, peer := range peerList {
+		if peer.Status && peer.Address != myIpPort {
+			TheirResourceList, err := getResourceList(peer.Address)
+			// Dead peer
+			if err != nil {
+				continue
+			}
+			if len(TheirResourceList) > len(resourceList) {
+				resourceList = TheirResourceList
+			}
+		}
+	}
+}
+
+// Gets the resourceList of given peerAddress, any error is returned and
+// interpreted as a dead peer.
+func getResourceList(peerAddress string) (theirResources Resources, err error) {
+	var shareResourceList ShareResourcesResponse
+	client, err := rpc.Dial("tcp", peerAddress)
+	if err != nil {
+		return
+	}
+	err = client.Call("Peer.ShareResourceList", myID, &shareResourceList)
+	if err != nil {
+		return
+	}
+	err = client.Close()
+	if err != nil {
+		return
+	}
+	return shareResourceList.ResourceList, nil
+}
+
+// Returns true if no missing resources, for debugging only 
+// TODO eliminate
+func allResourcesConsecutive() bool {
+	for i, resource := range resourceList {
+		resourceSlice := strings.Split(resource.Resource, " ")
+		count, _ := strconv.Atoi(resourceSlice[1]);
+		if ((count - 1) != i) {
+			fmt.Println("the value is: ", count, " when ", i + 1, " was expected!!!")
+			return false
+		}
+	}
+	return true
 }
 
 // Shares given resource with all alive peers
@@ -389,12 +477,13 @@ func ping() {
 // Calls peer, any error interpreted as dead and sets its status to false in peerList
 func pingPeer(peerAddress string, peerListIndex int) {
 	var reply bool
+	pingReq := PingRequest{peerList}
 	client, err := rpc.Dial("tcp", peerAddress)
 	if err != nil {
 		markDeadPeer(peerListIndex)
 		return
 	}
-	err = client.Call("Peer.Ping", myID, &reply)
+	err = client.Call("Peer.Ping", pingReq, &reply)
 	if err != nil {
 		markDeadPeer(peerListIndex)
 		return
