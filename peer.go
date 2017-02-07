@@ -198,7 +198,9 @@ func (p *Peer) Exit(PeerId int, reply *bool) error {
 func (p *Peer) Join(JReq JoinRequest, JResp *JoinResponse) error {
 	*JResp = JoinResponse{sessionID, serverIpPort, peerList, resourceList}
 	peerList = append(peerList, PeerAddressAndStatus{JReq.MyAddress, true})
-	go broadcastNewPeer(JReq.MyAddress)
+	// Returns once all existing peers have been sent requests to update their peerLists
+	// with new peer. If any of these requests fail, destination peer is assumed dead.
+	broadcastNewPeer(JReq.MyAddress)
 	return nil
 }
 
@@ -431,7 +433,7 @@ func shouldBroadcastPeer(peerAddrNStatus PeerAddressAndStatus, joiningPeer strin
 }
 
 // Calls Peer.AddPeer with arg newPeer to peerAddress
-// If errors return because peer is assumed dead.
+// If errors, return because peer is assumed dead.
 func sendNewPeer(peerAddress string, newPeer string) {
 	var reply bool
 	req := AddPeerRequest{newPeer}
