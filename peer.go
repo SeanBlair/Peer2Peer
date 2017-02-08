@@ -195,14 +195,7 @@ func main() {
 
 // For determining if peer is alive. If dead, caller's rpc will gracefully fail,
 // triggering the caller to update the status of this peer in peerList to false
-// Also for determing if calling peer knows about more peers than callee,
-// if so, callee overwrites its peerList with calling peers larger list.
-func (p *Peer) Ping(PingReq PingRequest, reply *bool) error {
-	if len(PingReq.PeerList) > len(peerList) {
-		// TODO remove println
-		fmt.Println("Found a discrepancy in peerLists, mine was shorter, fixed it")
-		peerList = PingReq.PeerList
-	}
+func (p *Peer) Ping(PeerId int, reply *bool) error {
 	*reply = true
 	return nil
 }
@@ -471,20 +464,19 @@ func ping() {
 				go pingPeer(peer.Address, i)
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 	}
 }
 
 // Calls peer, any error interpreted as dead and sets its status to false in peerList
 func pingPeer(peerAddress string, peerListIndex int) {
 	var reply bool
-	pingReq := PingRequest{peerList}
 	client, err := rpc.Dial("tcp", peerAddress)
 	if err != nil {
 		markDeadPeer(peerListIndex)
 		return
 	}
-	err = client.Call("Peer.Ping", pingReq, &reply)
+	err = client.Call("Peer.Ping", myID, &reply)
 	if err != nil {
 		markDeadPeer(peerListIndex)
 		return
