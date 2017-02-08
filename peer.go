@@ -281,17 +281,21 @@ func manageResource(resource Resource) {
 		delegateGetResource()
 	} else {
 		// finds longest resourceList among peers
+		// to guard against this peer somehow missing a resource
+		// that another peer has. The logic is that it is impossible
+		// to receive multiple copies of the same resource, therefore
+		// a longer resourceList is better as duplicates are impossible...
 		findLongestResourceList()
 		resourceList.FinalPrint(myID)
 
-		// checker that returns true if all resourceCounts
-		// are consecutive. for debugging.
-		// TODO eliminate this code...???
-		if allResourcesConsecutive() {
-			fmt.Println("There are ", len(resourceList), " resources and they are all consecutive! :) ")
-		} else {
-			fmt.Println("!!!Non-consecutive resources.... !!!!!!")
-		}
+		// // checker that returns true if all resourceCounts
+		// // are consecutive. for debugging.
+		// // TODO eliminate this code...???
+		// if allResourcesConsecutive() {
+		// 	fmt.Println("There are ", len(resourceList), " resources and they are all consecutive! :) ")
+		// } else {
+		// 	fmt.Println("!!!Non-consecutive resources.... !!!!!!")
+		// }
 
 		exitAllPeers()
 	}
@@ -333,19 +337,19 @@ func getResourceList(peerAddress string) (theirResources Resources, err error) {
 	return shareResourceList.ResourceList, nil
 }
 
-// Returns true if no missing resources, for debugging only
-// TODO eliminate
-func allResourcesConsecutive() bool {
-	for i, resource := range resourceList {
-		resourceSlice := strings.Split(resource.Resource, " ")
-		count, _ := strconv.Atoi(resourceSlice[1])
-		if (count - 1) != i {
-			fmt.Println("the value is: ", count, " when ", i+1, " was expected!!!")
-			return false
-		}
-	}
-	return true
-}
+// // Returns true if no missing resources, for debugging only
+// // TODO eliminate
+// func allResourcesConsecutive() bool {
+// 	for i, resource := range resourceList {
+// 		resourceSlice := strings.Split(resource.Resource, " ")
+// 		count, _ := strconv.Atoi(resourceSlice[1])
+// 		if (count - 1) != i {
+// 			fmt.Println("the value is: ", count, " when ", i+1, " was expected!!!")
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }
 
 // Shares given resource with all alive peers
 func shareResource(resource Resource) {
