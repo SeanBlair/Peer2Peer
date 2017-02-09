@@ -25,7 +25,6 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
-	// "strings"
 	"time"
 )
 
@@ -92,12 +91,6 @@ type AddResourceRequest struct {
 	TheResource Resource
 }
 
-// Request sent when pinging peer, used to identify missing
-// peers in peerList due to a race condition scenario.
-type PingRequest struct {
-	PeerList []PeerAddressAndStatus
-}
-
 // Response to Peer.ShareResourceList rpc
 // Used to verify that the resourceList printed is the
 // longest (most complete). For the error case when the peer
@@ -133,7 +126,7 @@ func main() {
 	// for managing threads
 	done := make(chan int)
 
-	// Set up RPC so peers can talk to each other
+	// Set up RPC server so peers can talk to each other
 	go func() {
 		pServer := rpc.NewServer()
 		p := new(Peer)
@@ -168,7 +161,7 @@ func main() {
 		JoinPrint(physicalPeerId)
 		go getResource()
 
-		// Joining peer
+		// Joining peer (mode == JOIN)
 	} else {
 		var joinResp JoinResponse
 		joinReq := JoinRequest{myIpPort}
@@ -188,6 +181,7 @@ func main() {
 		JoinPrint(physicalPeerId)
 	}
 
+	// for checking if peers in peerList are alive
 	go ping()
 	// blocks while threads exist alive
 	<-done
@@ -290,7 +284,6 @@ func manageResource(resource Resource) {
 
 		// // checker that returns true if all resourceCounts
 		// // are consecutive. for debugging.
-		// // TODO eliminate this code...???
 		// if allResourcesConsecutive() {
 		// 	fmt.Println("There are ", len(resourceList), " resources and they are all consecutive! :) ")
 		// } else {
@@ -338,7 +331,6 @@ func getResourceList(peerAddress string) (theirResources Resources, err error) {
 }
 
 // // Returns true if no missing resources, for debugging only
-// // TODO eliminate
 // func allResourcesConsecutive() bool {
 // 	for i, resource := range resourceList {
 // 		resourceSlice := strings.Split(resource.Resource, " ")
@@ -460,7 +452,7 @@ func exit(peerAddress string) {
 }
 
 // Pings all peers currently alive, if peer dead, updates peerList
-// repeats every 100 milliseconds
+// repeats every second
 func ping() {
 	for {
 		for i, peer := range peerList {
