@@ -30,18 +30,18 @@ Server arguments: [ip:port to listen for bootstrapper peer] [number of logical p
 
 
 **Step 1)** With the server already running, prepare 4 terminals with the following commands without yet running them:
-- a) go run peer.go -b 1 localhost:1111 localhost:9999
-- b) go run peer.go -j 2 localhost:2222 localhost:1111
-- c) go run peer.go -j 3 localhost:3333 localhost:2222
-- d) go run peer.go -j 4 localhost:4444 localhost:3333
+- **a)** go run peer.go -b 1 localhost:1111 localhost:9999
+- **b)** go run peer.go -j 2 localhost:2222 localhost:1111
+- **c)** go run peer.go -j 3 localhost:3333 localhost:2222
+- **d)** go run peer.go -j 4 localhost:4444 localhost:3333
 
-**Step 2)** Run terminal a, note from the server terminal that only one resource is served as the system has only one peer.
+**Step 2)** Run terminal **a**, note from the server terminal that only one resource is served as the system has only one peer.
 
-**Step 3)** Run terminal b, note that the server starts rapidly serving all its resources.
+**Step 3)** Run terminal **b**, note that the server starts rapidly serving all its resources.
 
-**Step 4)** Run terminals c and d, note that the server continues to serve resources.
+**Step 4)** Run terminals **c and d**, note that the server continues to serve resources.
 
-**Step 5) (Optional)** Kill (Ctrl + c) the processes on terminals a and b before the server finishes serving all the 
+**Step 5) (Optional)** Kill (Ctrl + c) the processes on terminals **a and b** before the server finishes serving all the 
 resources. 
 Note that the last peer to interact with the server prints out all the retrieved resources and triggers all live peers
 to terminate.
